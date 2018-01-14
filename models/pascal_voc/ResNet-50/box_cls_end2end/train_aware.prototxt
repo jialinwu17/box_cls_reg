@@ -5,7 +5,7 @@ layer {
   top: 'data'
   top: 'im_info'
   top: 'gt_boxes'
-  top: 'sampled_id'
+  
   python_param {
     module: 'roi_data_layer.layer'
     layer: 'RoIDataLayer'
@@ -3861,6 +3861,15 @@ layer {
     }
   }
 }
+layer {
+    bottom : 'rfcn_confidence'
+    name : 'rfcn_confidence_sig'
+    top : 'rfcn_confidence_sig'
+    type : 'Sigmoid'
+}
+
+
+
 
 #--------------bbox cls & reg ------------------
 
@@ -3868,9 +3877,9 @@ layer {
 layer {
   name: 'box_annotation'
   type: 'Python'
-  bottom: 'rfcn_confidence'
+  bottom: 'rfcn_confidence_sig'
   bottom: 'gt_boxes'
-  bottom: 'sampled_id'
+  bottom: 'rfcn_features'
   top : 'seed_points'
   top : 'rfcn_region_weights'
   top : 'bbox_cls_labels'
@@ -3880,8 +3889,9 @@ layer {
   top : 'bbox_inweights'
   top : 'bbox_outweights'
   top : 'seed_rfcn_features'
+  top: 'sampled_id'
   python_param {
-    module: 'roi_data_layer.rfcn_anno_layer'
+    module: 'roi_data_layer.rfcn_anno_layer_new'
     layer: 'RoIDataLayer'
     param_str: "{'num_classes': 21, 'agnostic_box' : 0 , 'roi_scale' : 0.0625}"
   }
@@ -3891,36 +3901,27 @@ layer {
     bottom: "rfcn_features"
     bottom: 'seed_points'
     bottom: 'sampled_id'
-    top: "box_cls_1"
-    name: "box_cls_1"
+    bottom: 'rfcn_region_weights'
+    top: "weighted_box_cls_1"
+    name: "weighted_box_cls_1"
     type: "RegionPooling"
     region_pooling_param {
         num_features: 64  # 7*7*64
-        num_samples : 16
+        num_samples : 9
         num_rfcn_regions : 49
         num_regions : 64
 
     }
-    # shape :(m, num_regions, num_samples, num_rfcn_regions, num_features)
+    # shape :(m, num_regions, num_samples, num_features)
 
 }
-layer {
-    bottom : 'box_cls_1'
-    bottom : 'rfcn_region_weights'
-    top : 'weighted_box_cls_1'
-    name : 'weighted_box_cls_1'
-    type : Eltwise 
-    eltwise_param {operation : PROD}
-}
-
 layer {
     bottom : 'weighted_box_cls_1'
     top : 'pooled_box_cls_1'
     name : 'pooled_box_cls_1'
-    type : Pooling3D 
-    pooling3d_param {
-      length : num_samples
-      kernel_h : 49
+    type : 'Pooling' 
+    pooling_param {
+      kernel_h : 9
       kernel_w : 1
     }
 }
@@ -3947,7 +3948,7 @@ layer {
     bottom : 'seed_rfcn_features_tile'
     top : 'box_cls_features'
     name : 'box_cls_features'
-    type : Eltwise 
+    type : 'Eltwise' 
     eltwise_param {operation : PROD}
 }
 
@@ -3978,6 +3979,9 @@ layer{
     #bottom : 'bbox_cls_outweights'
     type : 'SigmoidCrossEntropyLoss'
     top : 'bbox_cls_loss'
+    propagate_down: 1
+    propagate_down: 0
+    propagate_down: 0
     loss_weight: 1
 }
 #---------- box reg -----------
@@ -4009,7 +4013,7 @@ layer {
     name: "bbox_reg_x"
     type: "InnerProduct"
     inner_product_param {
-        num_output: 160 # num_regions_one_side * 2 * num_classes
+        num_output: 20 # num_regions_one_side * 2 * num_classes
         weight_filler {
             type: "gaussian"
             std: 0.01
@@ -4036,8 +4040,7 @@ layer {
     name: "bbox_reg_y"
     type: "InnerProduct"
     inner_product_param {
-        num_output: 160 # num_regions_one_side  * num_classes
-        pad: 0
+        num_output: 20 # num_regions_one_side  * num_classes
         weight_filler {
             type: "gaussian"
             std: 0.01
@@ -4062,21 +4065,59 @@ layer {
     bottom : 'bbox_reg_y'
     top : 'bbox_reg'
     name : 'bbox_reg'
-    type : Concat 
+    type : 'Concat' 
 }
+layer {
+    bottom : 'bbox_reg'
+    top : 'bbox_reg_shape'
+    name : 'bbox_reg_shape'
+    type : 'Reshape'
+    reshape_param { shape { dim: 0 dim: 16 dim: 20 dim: 1 } }
+}
+
 layer{
     name : 'bbox_reg_loss'
-    bottom : 'bbox_reg'
+    bottom : 'bbox_reg_shape'
     bottom : 'bbox_reg_labels'
-    bottom : 'bbox_reg_inweights'
-    bottom : 'bbox_reg_outweights'
+    bottom : 'bbox_inweights'
+    bottom : 'bbox_outweights'
     type : 'SmoothL1Loss'
     top : 'bbox_reg_loss'
-    loss_weight: 1
+    loss_weight: 10
 }
 
 layer{
     bottom :'bbox_cls_outweights'
+    bottom: 'bbox_targets'
+  bottom: 'bbox_inside_weights'
+  bottom: 'bbox_outside_weights'
     type : 'Silence'
     name :'Silence'
 }
+
+
+layer {
+  name: 'debug'
+  type: 'Python'
+  bottom: 'data'
+  bottom: 'im_info'
+  bottom: 'gt_boxes'
+  bottom : 'seed_points'
+  bottom : 'rfcn_region_weights'
+  bottom : 'bbox_cls_labels'
+  bottom : 'bbox_cls_inweights'
+  bottom : 'bbox_cls_outweights'
+  bottom : 'bbox_reg_labels'
+  bottom : 'bbox_inweights'
+  bottom : 'bbox_outweights'
+  bottom : 'seed_rfcn_features'
+  bottom: 'sampled_id'
+  python_param {
+    module: 'roi_data_layer.debug_layer'
+    layer: 'RoIDataLayer'
+    param_str: "{'num_blobs': 13, 'agnostic_box' : 0 , 'roi_scale' : 0.0625}"
+  }
+}
+
+
+# b /data/wujial/box_cls_reg/lib/roi_data_layer/debug_layer.py:37

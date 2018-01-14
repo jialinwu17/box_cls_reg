@@ -79,7 +79,7 @@ void SigmoidCrossEntropyLossLayer<Dtype>::Backward_cpu(
      bottom[0]->cpu_diff(),
      bottom[0]->mutable_cpu_diff());
     }
-    }
+    
   }
 }
 

@@ -138,6 +138,7 @@ class RoIDataLayer(caffe.Layer):
             roi_y2 =  rois[nroi,3,0,0] * self._roi_scale
             center_w = (roi_x1 + roi_x2)/2
             center_h = (roi_y1 + roi_y2)/2
+            area = (roi_x2 - roi_x1  )*(roi_y2 - roi_y1)
             #area = (rois[nroi,4] - rois[nroi,2] + 1 )*(rois[nroi,3] - rois[nroi,1] + 1)
             roi_class = rois[nroi,4,0,0]
             rfcn_conf_in_roi = rfcn_conf[0,np.ceil(roi_y1):np.floor(roi_y2) + 1,np.ceil(roi_x1):np.floor(roi_x2) + 1,:,:,roi_class]
@@ -184,62 +185,45 @@ class RoIDataLayer(caffe.Layer):
                 point2right = (- seed_x + roi_x2)/self._roi_scale
 
                 
-                bbox_cls_inweights[ nroi * cfg.TRAIN.M + m ,box_category_label * self._num_regions: (box_category_label+1) * self._num_regions] =  1.0 / np.minimum(cfg.TRAIN.M, seed_points_inds.shape[0])
+                bbox_cls_inweights[ nroi * cfg.TRAIN.M + m ,box_category_label * self._num_regions: (box_category_label+1) * self._num_regions] =  1.0 / np.minimum(cfg.TRAIN.M, seed_points_inds.shape[0]) #/ area
 
                 for i in xrange(self._num_regions_one_side / 2 ): #bound begin from 0
-                    if self._region_bound_x[i] <  point2left and point2left < self._region_bound_x[1 + i]:
-                        x_ind = self._num_regions_one_side / 2 - i - 1
-                        for j in xrange(self._num_regions_one_side / 2 ): 
-                            if self._region_bound_y[j] <  point2top:
-                                y_ind = self._num_regions_one_side / 2 - j - 1
-                                bbox_cls_labels[nroi * cfg.TRAIN.M + m ,(box_category_label) * self._num_regions + y_ind * self._num_regions_one_side + x_ind] = 1
-                                count += 1
-                            if self._region_bound_y[j] <  point2bottom:
-                                y_ind = self._num_regions_one_side / 2 + j 
-                                bbox_cls_labels[nroi * cfg.TRAIN.M + m ,(box_category_label) * self._num_regions + y_ind * self._num_regions_one_side + x_ind ] = 1
-                                count += 1
-                        bbox_reg_labels[nroi * cfg.TRAIN.M + m ,(box_category_label) *self._num_regions_one_side * 2 + x_ind ] = ( self._region_bound_x[1 + i] - point2left)/(self._region_bound_x[1 + i] - self._region_bound_x[i]) - 0.5
-                        bbox_inweights[nroi * cfg.TRAIN.M + m ,(box_category_label) *self._num_regions_one_side * 2 + x_ind ]= 1
-                    if self._region_bound_x[i] <  point2right and point2right < self._region_bound_x[1 + i]:
+                    if self._region_bound_x[i] <  point2left :
                         x_ind = self._num_regions_one_side / 2 + i 
                         for j in xrange(self._num_regions_one_side / 2 ): 
                             if self._region_bound_x[j] <  point2top:
                                 y_ind = self._num_regions_one_side / 2 - j - 1
-                                bbox_cls_labels[nroi * cfg.TRAIN.M + m ,(box_category_label) * self._num_regions + y_ind * self._num_regions_one_side + x_ind ] = 1
-                                count += 1
+                                bbox_cls_labels[nroi * cfg.TRAIN.M + m ,(box_category_label) * self._num_regions + y_ind * self._num_regions_one_side + x_ind ] = 1.0 #/ area
                             if self._region_bound_x[j] <  point2bottom:
                                 y_ind = self._num_regions_one_side / 2 + j 
-                                bbox_cls_labels[nroi * cfg.TRAIN.M + m ,(box_category_label) * self._num_regions + y_ind * self._num_regions_one_side + x_ind ] = 1
-                                count += 1
+                                bbox_cls_labels[nroi * cfg.TRAIN.M + m ,(box_category_label) * self._num_regions + y_ind * self._num_regions_one_side + x_ind ] = 1.0 #/ area
+                    if self._region_bound_x[i] <  point2right :
+                        x_ind = self._num_regions_one_side / 2 + i 
+                        for j in xrange(self._num_regions_one_side / 2 ): 
+                            if self._region_bound_x[j] <  point2top:
+                                y_ind = self._num_regions_one_side / 2 - j - 1
+                                bbox_cls_labels[nroi * cfg.TRAIN.M + m ,(box_category_label) * self._num_regions + y_ind * self._num_regions_one_side + x_ind ] = 1.0 #/ area
+                            if self._region_bound_x[j] <  point2bottom:
+                                y_ind = self._num_regions_one_side / 2 + j 
+                                bbox_cls_labels[nroi * cfg.TRAIN.M + m ,(box_category_label) * self._num_regions + y_ind * self._num_regions_one_side + x_ind ] = 1.0 #/ area
+                            
+                    if self._region_bound_x[i] <  point2left and point2left < self._region_bound_x[1 + i]:
+                        x_ind = self._num_regions_one_side / 2 - i - 1
+                        bbox_reg_labels[nroi * cfg.TRAIN.M + m ,(box_category_label) *self._num_regions_one_side * 2 + x_ind ] = ( self._region_bound_x[1 + i] - point2left)/(self._region_bound_x[1 + i] - self._region_bound_x[i]) - 0.5
+                        bbox_inweights[nroi * cfg.TRAIN.M + m ,(box_category_label) *self._num_regions_one_side * 2 + x_ind ]= 1
+                    if self._region_bound_x[i] <  point2right and point2right < self._region_bound_x[1 + i]:
+                        x_ind = self._num_regions_one_side / 2 + i 
                         bbox_reg_labels[nroi * cfg.TRAIN.M + m ,(box_category_label) *self._num_regions_one_side * 2 + x_ind ] = ( self._region_bound_x[1 + i] - point2right)/(self._region_bound_x[1 + i] - self._region_bound_x[i]) - 0.5
                         bbox_inweights[nroi * cfg.TRAIN.M + m ,(box_category_label) *self._num_regions_one_side * 2 + x_ind ]= 1
                 
                 for i in xrange(self._num_regions_one_side / 2 ): #bound begin from 0
                     if self._region_bound_y[i] <  point2top and point2top < self._region_bound_y[1 + i]:
                         y_ind = self._num_regions_one_side / 2 - i - 1
-                        for j in xrange(self._num_regions_one_side / 2 ): 
-                            if self._region_bound_x[j] <  point2left:
-                                x_ind = self._num_regions_one_side / 2 - j - 1
-                                bbox_cls_labels[nroi * cfg.TRAIN.M + m ,(box_category_label) * self._num_regions + y_ind * self._num_regions_one_side + x_ind ] = 1
-                                count += 1
-                            if self._region_bound_x[j] <  point2right:
-                                x_ind = self._num_regions_one_side / 2 + j 
-                                bbox_cls_labels[nroi * cfg.TRAIN.M + m ,box_category_label * self._num_regions + y_ind * self._num_regions_one_side + x_ind ] = 1
-                                count += 1
                         bbox_reg_labels[nroi * cfg.TRAIN.M + m ,box_category_label*self._num_regions_one_side * 2 + self._num_regions_one_side+ y_ind ] = ( self._region_bound_y[1 + i] - point2top )/(self._region_bound_y[1 + i] - self._region_bound_y[i]) - 0.5
                         bbox_inweights[nroi * cfg.TRAIN.M + m ,box_category_label *self._num_regions_one_side * 2 + self._num_regions_one_side+y_ind ]= 1
                             
                     if self._region_bound_y[i] <  point2bottom and point2bottom < self._region_bound_y[1 + i]:
                         y_ind = self._num_regions_one_side / 2 + i 
-                        for j in xrange(self._num_regions_one_side / 2 ): 
-                            if self._region_bound_x[j] <  point2left:
-                                x_ind = self._num_regions_one_side / 2 - j - 1
-                                bbox_cls_labels[nroi * cfg.TRAIN.M + m ,box_category_label * self._num_regions + y_ind * self._num_regions_one_side + x_ind ] = 1
-                                count += 1
-                            if self._region_bound_x[j] <  point2right:
-                                x_ind = self._num_regions_one_side / 2 + j 
-                                bbox_cls_labels[nroi * cfg.TRAIN.M + m ,box_category_label* self._num_regions + y_ind * self._num_regions_one_side + x_ind ] = 1
-                                count += 1
                         bbox_reg_labels[nroi * cfg.TRAIN.M + m ,box_category_label*self._num_regions_one_side * 2 + self._num_regions_one_side+ y_ind ] = ( self._region_bound_y[1 + i] -point2bottom )/(self._region_bound_y[1 + i] - self._region_bound_y[i]) - 0.5
                         bbox_inweights[nroi * cfg.TRAIN.M + m ,box_category_label*self._num_regions_one_side * 2 + self._num_regions_one_side+y_ind ]= 1
                 count -= 4

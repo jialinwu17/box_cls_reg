@@ -49,6 +49,9 @@ def parse_args():
     parser.add_argument('--set', dest='set_cfgs',
                         help='set config keys', default=None,
                         nargs=argparse.REMAINDER)
+    parser.add_argument('--model_name', dest='model_name',
+                        help='solver prototxt',
+                        default=None, type=str)
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -107,6 +110,6 @@ if __name__ == '__main__':
     output_dir = get_output_dir(imdb)
     print 'Output will be saved to `{:s}`'.format(output_dir)
 
-    train_net(args.solver, roidb, output_dir,
+    train_net(args.solver, roidb, output_dir,args.model_name,
               pretrained_model=args.pretrained_model,
               max_iters=args.max_iters)

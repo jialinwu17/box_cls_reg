@@ -27,36 +27,21 @@ class RoIDataLayer(caffe.Layer):
         # parse the layer parameter string, which must be valid YAML
         layer_params = yaml.load(self.param_str)
         shape = bottom[0].data.shape #1, C, H, W
-
-        self._order_str = layer_params['order']
-        self._order_str = self._order_str.split(',')
-        self._order = [int(order_item) for order_item in self._order_str ]
-        self._order_back = np.zeros((len(self._order_str)))
-        tmp = np.zeros(shape).transpose(self._order)
-
-        top[0].reshape(*(tmp.shape))
-        for i in xrange(len(self._order_str)):
-            self._order_back[self._order_str[i]] = i
-
+        self._num_blobs = layer_params['num_blobs']
+        
 
 
 
     def forward(self, bottom, top):
         """Get blobs and copy them into this layer's top blob vector."""
+        data = {}
+        for i in xrange(self._num_blobs):
+          data[str(i)] = bottom[i].data
         
-        data = bottom[0].data
-        data = np.transpose(data,self._order) 
-        top[0].reshape(*(data.shape))
-        top[0].data[...] = data
-
 
     def backward(self, top, propagate_down, bottom):
         """This layer does not propagate gradients."""
-        diff = top[0].diff
-        diff = np.transpose(diff, self._order_back)
-        bottom[0].reshape(*(diff.shape))
-        bottom[0].diff[...] = diff
-
+        pass
 
     def reshape(self, bottom, top):
         """Reshaping happens during the call to forward."""

@@ -33,11 +33,13 @@ cfg = __C
 
 __C.TRAIN = edict()
 __C.TRAIN.spatial_scale = 0.0625
-__C.TRAIN.M = 1000
+__C.TRAIN.M = 3
 __C.TRAIN.num_regions = 64
 __C.TRAIN.num_features = 64
 __C.TRAIN.num_rfcn_regions = 49
-__C.TRAIN.num_samples = 16
+__C.TRAIN.num_samples = 9
+__C.TRAIN.save_feat = 500
+__C.TRAIN.num_classes = 21
 # Scales to use during training (can list multiple scales)
 # Each scale is the pixel size of an image's shortest side
 __C.TRAIN.SCALES = (600,)

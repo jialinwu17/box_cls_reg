@@ -185,7 +185,7 @@ class pascal_voc(imdb):
         filename = os.path.join(self._data_path, 'Annotations', index + '.xml')
         tree = ET.parse(filename)
         objs = tree.findall('object')
-        img_info = tree.findall('size')
+        img_info = tree.findall('size')[0]
         if not self.config['use_diff']:
             # Exclude the samples labeled as difficult
             non_diff_objs = [
@@ -204,10 +204,24 @@ class pascal_voc(imdb):
         train_boxes_size = np.zeros((num_objs,2), dtype=np.float32)
 
         # Load object bounding boxes into a data frame.
-        width = img_info.find('width')
-        height = img_info.find('height')
+        width = int(img_info.find('width').text)
+        height = int(img_info.find('height').text)
 
-        scale = cfg.TRAIN.SCLAES[0] / np.minimize(width,height)
+        scale = cfg.TRAIN.SCALES[0] / np.minimum(width,height)
+        im_shape = np.array([width,height])
+        im_size_min = np.min(im_shape[0:2])
+        im_size_max = np.max(im_shape[0:2])
+        scale = float(cfg.TRAIN.SCALES[0]) / float(im_size_min)
+        # Prevent the biggest axis from being more than MAX_SIZE
+        if np.round(scale * im_size_max) > 1000:
+            scale = float(1000) / float(im_size_max)
+
+
+
+
+
+
+
         for ix, obj in enumerate(objs):
             bbox = obj.find('bndbox')
             # Make pixel indexes 0-based

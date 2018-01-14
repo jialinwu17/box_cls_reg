@@ -1,0 +1,52 @@
+name: "TEST"
+force_backward : true
+input: "rfcn_features"
+input_shape {
+  dim: 1
+  dim: 36
+  dim: 10
+  dim: 10
+}
+
+input: "seed_points"
+input_shape {
+  dim: 1
+  dim: 2
+}
+input: "sampled_id"
+input_shape {
+  dim: 1
+  dim: 576
+  dim: 2
+}
+
+input: "rfcn_region_weights"
+input_shape {
+  dim: 1
+  dim: 576
+  dim: 9
+}
+
+layer {
+    bottom: "rfcn_features"
+    bottom: 'seed_points'
+    bottom: 'sampled_id'
+    bottom: 'rfcn_region_weights'
+    top: "weighted_box_cls_1"
+    name: "weighted_box_cls_1"
+    type: "RegionPooling"
+    region_pooling_param {
+        num_features: 4  # 7*7*64
+        num_samples : 9
+        num_rfcn_regions : 9
+        num_regions : 64
+
+    }
+}
+
+layer {
+  bottom :'weighted_box_cls_1'
+  name :'Silence'
+  type :"Silence"
+
+}

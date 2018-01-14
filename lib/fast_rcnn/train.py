@@ -13,10 +13,11 @@ import roi_data_layer.roidb as rdl_roidb
 from utils.timer import Timer
 import numpy as np
 import os
-
+import scipy.io as sio
 from caffe.proto import caffe_pb2
 import google.protobuf as pb2
-
+import scipy.io as sio
+import google.protobuf.text_format
 class SolverWrapper(object):
     """A simple wrapper around Caffe's solver.
     This wrapper gives us control over he snapshotting process, which we
@@ -27,6 +28,61 @@ class SolverWrapper(object):
                  pretrained_model=None):
         """Initialize the SolverWrapper."""
         self.output_dir = output_dir
+
+        num_regions = cfg.TRAIN.num_regions
+        num_regions_one_side = int(np.sqrt(num_regions))
+        num_samples = cfg.TRAIN.num_samples
+        sampled_id = np.zeros((num_regions*num_samples,2))
+        bound_h = np.zeros((np.sqrt(num_regions)/2  + 1))
+        bound_w = np.zeros((np.sqrt(num_regions)/2  + 1))
+        wid = {}
+        hei = {}
+        sorted_w = {}
+        sorted_h = {}
+        for i in xrange(1, cfg.TRAIN.num_classes):
+            wid[str(i )] = []
+            hei[str(i )] = []
+        for i in xrange(len(roidb)/2):
+            for j in xrange(roidb[i]['train_boxes_size'].shape[0]) :
+                gt_classes = roidb[i]['gt_classes'][j]
+                wid[str(gt_classes)].extend([roidb[i]['train_boxes_size'][j,0]])
+                hei[str(gt_classes)].extend([roidb[i]['train_boxes_size'][j,1]])
+        for k in xrange(1, cfg.TRAIN.num_classes):
+            wid[str(k)] = np.array(wid[str(k)])
+            hei[str(k)] = np.array(hei[str(k)])
+            sorted_w[str(k)] = np.sort(wid[str(k)])
+            sorted_h[str(k)] = np.sort(hei[str(k)])
+            for i in xrange( 1,int(np.sqrt(num_regions)/2) +1 ):
+                bound_w[i] = sorted_w[str(k)][ np.maximum(0, np.ceil(wid[str(k)].shape[0]*(i) / (np.sqrt(num_regions)/2)) - 1 )]
+                bound_h[i] = sorted_h[str(k)][ np.maximum(0, np.ceil(wid[str(k)].shape[0]*(i) / (np.sqrt(num_regions)/2)) - 1 )]
+            sio.savemat('bound_%d.mat'%(k),{'bound_w' : bound_w,'bound_h' : bound_h})
+        
+            for i in xrange(num_regions_one_side):
+                for j in xrange(num_regions_one_side):
+                    if i < num_regions_one_side / 2:
+                        bound_x1 = - bound_w[num_regions_one_side / 2 - i]
+                        bound_x2 = - bound_w[num_regions_one_side / 2 - i - 1]
+                    else:
+                        bound_x1 = bound_w[i - num_regions_one_side / 2]
+                        bound_x2 = bound_w[i - num_regions_one_side / 2 + 1]
+                    if j < num_regions_one_side / 2:
+                        bound_y1 = - bound_h[num_regions_one_side / 2 - j]
+                        bound_y2 = - bound_h[num_regions_one_side / 2 - j - 1]
+                    else:
+                        bound_y1 = bound_h[j - num_regions_one_side / 2]
+                        bound_y2 = bound_h[j - num_regions_one_side / 2 + 1]
+                    bound_x1 = np.ceil(bound_x1)
+                    bound_y1 = np.ceil(bound_y1)
+                    bound_x2 = np.floor(bound_x2)
+                    bound_y2 = np.floor(bound_y2)
+                    x_step = (bound_x2 - bound_x1)/(np.sqrt(num_samples) )
+                    y_step = (bound_y2 - bound_y1)/(np.sqrt(num_samples) )
+                    sampled_id[(i* num_regions_one_side + j)*num_samples : (i* num_regions_one_side + j + 1)*num_samples ,0 ] = np.tile(np.linspace(bound_x1,bound_x2,np.sqrt(num_samples) + 2 )[1:-1].reshape(1,np.sqrt(num_samples)),[np.sqrt(num_samples),1]).reshape((num_samples))
+                    sampled_id[(i* num_regions_one_side + j)*num_samples : (i* num_regions_one_side + j + 1)*num_samples ,1 ] = np.tile(np.linspace(bound_y1,bound_y2,np.sqrt(num_samples) + 2 )[1:-1].reshape(np.sqrt(num_samples),1),[1,np.sqrt(num_samples)]).reshape((num_samples))
+            sampled_id = np.around(sampled_id * cfg.TRAIN.spatial_scale)
+            sio.savemat('sampled_id_%d.mat'%(k),{'sampled_id' : sampled_id})
+
+
 
         if (cfg.TRAIN.HAS_RPN and cfg.TRAIN.BBOX_REG and
             cfg.TRAIN.BBOX_NORMALIZE_TARGETS):
@@ -52,7 +108,7 @@ class SolverWrapper(object):
 
         self.solver.net.layers[0].set_roidb(roidb)
 
-    def snapshot(self):
+    def snapshot(self, model_name):
         """Take a snapshot of the network after unnormalizing the learned
         bounding-box regression weights. This enables easy use at test-time.
         """
@@ -116,7 +172,8 @@ class SolverWrapper(object):
                  if cfg.TRAIN.SNAPSHOT_INFIX != '' else '')
         filename = (self.solver_param.snapshot_prefix + infix +
                     '_iter_{:d}'.format(self.solver.iter) + '.caffemodel')
-        filename = os.path.join(self.output_dir, filename)
+        #filename = os.path.join(self.output_dir, filename)
+        filename = 'models/pascal_voc/ResNet-50/' + model_name +'/' + filename
         net.save(str(filename))
         print 'Wrote snapshot to: {:s}'.format(filename)
 
@@ -135,7 +192,7 @@ class SolverWrapper(object):
 
         return filename
 
-    def train_model(self, max_iters):
+    def train_model(self, max_iters,model_name):
         """Network training loop."""
         last_snapshot_iter = -1
         timer = Timer()
@@ -144,16 +201,32 @@ class SolverWrapper(object):
             # Make one SGD update
             timer.tic()
             self.solver.step(1)
+            solver = self.solver
+            net = solver.net
+            keys = net.blobs.keys()
+            saved_dict = {}
+            if self.solver.iter % cfg.TRAIN.save_feat == 0:
+                for k in keys :
+                    if 'res' not in k:
+                        saved_dict[k] = net.blobs[k].data
+
+                sio.savemat('models/pascal_voc/ResNet-50/' + model_name +'/' + 'saved_dict_%d.mat'%self.solver.iter, saved_dict)
+
+
+
+
+
+
             timer.toc()
             if self.solver.iter % (10 * self.solver_param.display) == 0:
                 print 'speed: {:.3f}s / iter'.format(timer.average_time)
 
             if self.solver.iter % cfg.TRAIN.SNAPSHOT_ITERS == 0:
                 last_snapshot_iter = self.solver.iter
-                model_paths.append(self.snapshot())
+                self.snapshot(model_name)
 
         if last_snapshot_iter != self.solver.iter:
-            model_paths.append(self.snapshot())
+            model_paths.append(self.snapshot(model_name))
         return model_paths
 
 def get_training_roidb(imdb):
@@ -193,7 +266,7 @@ def filter_roidb(roidb):
                                                        num, num_after)
     return filtered_roidb
 
-def train_net(solver_prototxt, roidb, output_dir,
+def train_net(solver_prototxt, roidb, output_dir,model_name,
               pretrained_model=None, max_iters=40000):
     """Train a Fast R-CNN network."""
 
@@ -202,6 +275,6 @@ def train_net(solver_prototxt, roidb, output_dir,
                        pretrained_model=pretrained_model)
 
     print 'Solving...'
-    model_paths = sw.train_model(max_iters)
+    model_paths = sw.train_model(max_iters, model_name)
     print 'done solving'
     return model_paths

@@ -29,8 +29,6 @@ class LossLayer : public Layer<Dtype> {
   virtual void Reshape(
       const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top);
 
-  virtual inline int ExactNumBottomBlobs() const { return 2; }
-
   /**
    * @brief For convenience and backwards compatibility, instruct the Net to
    *        automatically allocate a single top Blob for LossLayers, into which
@@ -38,7 +36,6 @@ class LossLayer : public Layer<Dtype> {
    *        one in the prototxt, etc.).
    */
   virtual inline bool AutoTopBlobs() const { return true; }
-  virtual inline int ExactNumTopBlobs() const { return 1; }
   /**
    * We usually cannot backpropagate to the labels; ignore force_backward for
    * these inputs.

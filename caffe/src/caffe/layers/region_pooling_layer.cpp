@@ -29,7 +29,7 @@ namespace caffe {
     // bottom 0 data (1, num_rfcn_region * num_features, H, W )
     // bottom 1 sampled points (m, 2) spatial index in roi scale
     // bottom 2 feature extracting point (num_samples, num_regions, 2) (only offset)
-    // bottom 3 rfcn regions idx (m, num_regions) val in range(0, num_rfcn_regions)
+    // bottom 3 rfcn regions weights shape :(m, num_regions, num_samples, num_rfcn_regions) val in range(0, num_rfcn_regions)
     num_features_ = region_pooling_param.num_features();
     num_regions_ = region_pooling_param.num_regions();
     num_rfcn_regions_ = region_pooling_param.num_rfcn_regions(); 
@@ -45,8 +45,8 @@ namespace caffe {
       << "input channel number does not match layer parameters";
     height_ = bottom[0]->height();
     width_ = bottom[0]->width();
-    top[0]->Reshape(bottom[1]->num(), channels_, height_, width_);
-    mapping_channel_.Reshape(bottom[1]->num(), num_regions_, num_samples_ , num_rfcn_regions_, num_features_);
+    top[0]->Reshape(bottom[1]->num(), num_regions_, num_samples_ , num_features_);
+    mapping_channel_.Reshape(bottom[1]->num(), num_regions_, num_samples_ , num_features_);
   }
 
   template <typename Dtype>

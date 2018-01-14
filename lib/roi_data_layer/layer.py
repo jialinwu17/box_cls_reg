@@ -12,7 +12,7 @@ RoIDataLayer implements a Caffe Python layer.
 
 import caffe
 from fast_rcnn.config import cfg
-from roi_data_layer.new_minibatch import get_minibatch
+from roi_data_layer.minibatch import get_minibatch
 import numpy as np
 import yaml
 import scipy.io as sio
@@ -70,46 +70,7 @@ class RoIDataLayer(caffe.Layer):
         num_samples = cfg.TRAIN.num_samples
         self._roidb = roidb
         self._shuffle_roidb_inds()
-        self._sampled_id = np.zeros((num_regions*num_samples,2))
-        self._bound_h = np.zeros((np.sqrt(num_regions)/2  + 1))
-        self._bound_w = np.zeros((np.sqrt(num_regions)/2  + 1))
-        wid = np.zeros((len(roidb)))
-        hei = np.zeros((len(roidb)))
-        for i in xrange(wid.shape[0]):
-            wid[i] = roidb[i]['train_boxes_size'][0]
-            hei[i] = roidb[i]['train_boxes_size'][1]
-        sorted_w = np.sort(wid)
-        sorted_h = np.sort(hei)
-        for i in xrange( np.sqrt(num_regions)/2 ):
-            self._bound_w[i+1] = sorted_w[ np.ceil(len(roidb)*(i+1) / (np.sqrt(num_regions)/2))]
-            self._bound_h[i+1] = sorted_h[ np.ceil(len(roidb)*(i+1) / (np.sqrt(num_regions)/2))]
-        sio.savemat('bound.mat',{'bound_w' = self._bound_w,'bound_h' = self._bound_h})
         
-        for i in xrange(num_regions_one_side):
-            for j in xrange(num_regions_one_side):
-                if i < num_regions_one_side / 2:
-                    bound_x1 = - self._bound_w[num_regions_one_side / 2 - i]
-                    bonnd_x2 = - self._bound_w[num_regions_one_side / 2 - i - 1]
-                else:
-                    bound_x1 = self._bound_w[i - num_regions_one_side / 2]
-                    bonnd_x2 = self._bound_w[i - num_regions_one_side / 2 + 1]
-                if j < num_regions_one_side / 2:
-                    bound_y1 = - self._bound_h[num_regions_one_side / 2 - j]
-                    bonnd_y2 = - self._bound_h[num_regions_one_side / 2 - j - 1]
-                else:
-                    bound_y1 = self._bound_h[j - num_regions_one_side / 2]
-                    bonnd_y2 = self._bound_h[j - num_regions_one_side / 2 + 1]
-                bound_x1 = np.ceil(bound_x1)
-                bound_y1 = np.ceil(bound_y1)
-                bound_x2 = np.floor(bound_x2)
-                bound_y2 = np.floor(bound_y2)
-                x_step = (bound_x2 - bound_x1)/(np.sqrt(num_samples) )
-                y_step = (bound_y2 - bound_y1)/(np.sqrt(num_samples) )
-                self._sampled_id[(i* num_regions_one_side + j)*num_samples : (i* num_regions_one_side + j + 1)*num_samples ,0 ] = bound_x1 :bound_x2:x_step
-                self._sampled_id[(i* num_regions_one_side + j)*num_samples : (i* num_regions_one_side + j + 1)*num_samples ,1 ] = bound_y1 :bound_y2:y_step
-        self._sampled_id = np.around(self._sampled_id * cfg.TRAIN.spatial_scale)
-        sio.savemat('sampled_id.mat',{'sampled_id' = self._sampled_id})
-                
 
 
     def setup(self, bottom, top):
@@ -120,7 +81,7 @@ class RoIDataLayer(caffe.Layer):
 
         self._num_classes = layer_params['num_classes']
         self._num_regions = cfg.TRAIN.num_regions
-        self._num_regions_one_side = np.sqrt(layer_params['num_regions'])
+        self._num_regions_one_side = np.sqrt(cfg.TRAIN.num_regions)
         self._name_to_top_map = {}
 
         # data blob: holds a batch of N images, each with 3 channels
@@ -169,12 +130,13 @@ class RoIDataLayer(caffe.Layer):
                 top[idx].reshape(1, num_reg_class * 4, 1, 1)
                 self._name_to_top_map['bbox_outside_weights'] = idx
                 idx += 1
-        top[idx].reshape( cfg.TRAIN.num_samples*cfg.TRAIN.num_regions , 2)
-        self._name_to_top_map['sampled_id'] = idx
-        idx += 1
+                
+        
 
         print 'RoiDataLayer: name_to_top:', self._name_to_top_map
         assert len(top) == len(self._name_to_top_map)
+        
+
 
     def forward(self, bottom, top):
         """Get blobs and copy them into this layer's top blob vector."""
@@ -190,8 +152,7 @@ class RoIDataLayer(caffe.Layer):
             top[top_ind].reshape(*(blob.shape))
             # Copy data into net's input blobs
             top[top_ind].data[...] = blob.astype(np.float32, copy=False)
-        top[len(blob)].reshape(*(self._sampled_id.shape))
-        top[len(blob)].data[...] = self._sampled_id.astype(np.float32, copy=False)
+        
 
     def backward(self, top, propagate_down, bottom):
         """This layer does not propagate gradients."""

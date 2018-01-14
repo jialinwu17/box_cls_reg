@@ -19,7 +19,7 @@
 #include <vector>
 
 #include "caffe/layer.hpp"
-#include "caffe/pool3d_layer.hpp"
+#include "caffe/layers/pool3d_layer.hpp"
 #include "caffe/util/math_functions.hpp"
 
 using std::max;

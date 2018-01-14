@@ -3727,11 +3727,11 @@ layer {
 
 layer {
     bottom: "conv_new_1"
-    top: "rfcn_cls"
+    top: "rfcn_features"
     name: "rfcn_cls"
     type: "Convolution"
     convolution_param {
-        num_output: 1029 #21*(7^2) cls_num*(score_maps_size^2)
+        num_output: 3136 #21*(7^2) cls_num*(score_maps_size^2)
         kernel_size: 1
         pad: 0
         weight_filler {
@@ -3749,6 +3749,12 @@ layer {
     param {
         lr_mult: 2.0
     }
+}
+layer {
+    bottom: "rfcn_features"
+    top: "rfcn_features"
+    name: "rfcn_features_relu"
+    type: "ReLU"
 }
 layer {
     bottom: "conv_new_1"
@@ -3778,28 +3784,50 @@ layer {
 
 #--------------position sensitive RoI pooling--------------
 layer {
-    bottom: "rfcn_cls"
+    bottom: "rfcn_features"
     bottom: "rois"
     top: "psroipooled_cls_rois"
     name: "psroipooled_cls_rois"
     type: "PSROIPooling"
     psroi_pooling_param {
         spatial_scale: 0.0625
-        output_dim: 21
+        output_dim: 64
         group_size: 7
     }
 }
-
 layer {
     bottom: "psroipooled_cls_rois"
-    top: "cls_score"
-    name: "ave_cls_score_rois"
+    top: "ave_pooled_rfcn"
+    name: "ave_pooled_rfcn"
     type: "Pooling"
     pooling_param {
         pool: AVE
         kernel_size: 7
         stride: 7
     }
+}
+layer {
+  name: "feat2cls_score"
+  type: "InnerProduct"
+  bottom: "ave_pooled_rfcn"
+  top: "cls_score"
+  param {
+    name: "feat2score_w"
+    lr_mult: 1
+  }
+  param {
+    name: "feat2score_b"
+    lr_mult: 2
+  }
+  inner_product_param {
+    num_output: 21
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
 }
 
 
